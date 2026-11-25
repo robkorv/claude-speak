@@ -1,0 +1,16 @@
+{
+  "$schema": "https://www.schemastore.org/claude-code-marketplace.json",
+  "name": "speak-reply",
+  "description": "Spoken Claude Code replies with Piper text-to-speech.",
+  "owner": {
+    "name": "Robbert Korving"
+  },
+  "plugins": [
+    {
+      "name": "speak-reply",
+      "description": "Read the first line and the \"Next:\" line of each reply out loud with Piper.",
+      "source": "./",
+      "category": "productivity"
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# Control the claude-speak spoken-reply Stop hook (speak-reply.sh next to this file).
+#   claude-speak off          mute until turned back on (survives restarts)
+#   claude-speak on           unmute
+#   claude-speak status       show whether it is on or off
+#   claude-speak stop         stop speech from every session
+#   claude-speak stop --hook  stop only this session's speech (reads the hook JSON
+#                             on stdin; used by the UserPromptSubmit hook), and
+#                             skip the reply to a /speak command
+piddir="${XDG_RUNTIME_DIR:-/tmp}/claude-speak-reply"
+muteflag="$HOME/.claude/.speak-reply-off"
+
+stop_file() {
+    [ -f "$1" ] && kill -- -"$(cat "$1")" 2>/dev/null
+    rm -f "$1"
+}
+
+stop_all() {
+    for f in "$piddir"/*.pid; do stop_file "$f"; done
+    spd-say -C 2>/dev/null
+    return 0
+}
+
+case "${1:-stop}" in
+    stop)
+        if [ "$2" = "--hook" ]; then
+            input=$(cat)
+            session=$(printf '%s' "$input" | jq -r '.session_id // empty' 2>/dev/null | tr -cd 'A-Za-z0-9-')
+            prompt=$(printf '%s' "$input" | jq -r '.prompt // empty' 2>/dev/null)
+            [ -n "$session" ] || exit 0
+            stop_file "$piddir/$session.pid"
+            # A /speak command: don't read its own reply out loud.
+            if printf '%s' "$prompt" | grep -qE '^[[:space:]]*/(speak-reply:)?speak([[:space:]]|$)'; then
+                mkdir -p "$piddir" && touch "$piddir/$session.skip"
+            fi
+        else
+            stop_all; echo "spoken replies: stopped"
+        fi ;;
+    off)    stop_all; touch "$muteflag"; echo "spoken replies: off" ;;
+    on)     rm -f "$muteflag"; echo "spoken replies: on" ;;
+    status) [ -e "$muteflag" ] && echo "spoken replies: off" || echo "spoken replies: on" ;;
+    *)      echo "usage: claude-speak [stop [--hook]|off|on|status]" >&2; exit 2 ;;
+esac
+exit 0

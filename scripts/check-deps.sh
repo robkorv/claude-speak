@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# SessionStart hook: warn when Piper or a voice is missing (speech then falls
+# back to spd-say). Prints nothing when everything is in place.
+piper="$HOME/.local/bin/piper"
+voices="$HOME/.local/share/piper-voices"
+missing=()
+[ -x "$piper" ] || missing+=("Piper (~/.local/bin/piper)")
+for v in en_US-lessac-medium nl_NL-pim-medium; do
+    [ -f "$voices/$v.onnx" ] || missing+=("voice $v")
+done
+command -v jq >/dev/null || missing+=("jq")
+[ ${#missing[@]} -eq 0 ] && exit 0
+msg="speak-reply: missing $(IFS=,; echo "${missing[*]}" | sed 's/,/, /g'). See the README install steps; until then replies use spd-say."
+jq -n --arg m "$msg" '{systemMessage: $m}' 2>/dev/null || echo "$msg" >&2
+exit 0

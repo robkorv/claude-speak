@@ -48,19 +48,33 @@ Inside Claude Code:
 | Command | What it does |
 |---|---|
 | `/speak-reply:speak` or `/speak-reply:speak stop` | stop the reply being read now, in every session |
-| `/speak-reply:speak off` | mute until turned back on; creates `~/.claude/.speak-reply-off`, so it survives restarts |
-| `/speak-reply:speak on` | unmute |
-| `/speak-reply:speak status` | show whether it is on or off |
+| `/speak-reply:speak off` | mute **this session** |
+| `/speak-reply:speak on` | unmute **this session**, even when global is off |
+| `/speak-reply:speak global off` | mute all sessions; creates `~/.claude/.speak-reply-off`, so it survives restarts |
+| `/speak-reply:speak global on` | unmute all sessions |
+| `/speak-reply:speak status` | show this session's and the global setting |
 
 The reply to a `/speak-reply:speak` command is never read out loud.
 
-Mute one session only: start it with `CLAUDE_SPEAK_OFF=1 claude`. Hooks inherit the environment `claude` was started with, so other sessions keep talking.
+Which setting wins, first match:
 
-From a terminal, the same control script is in the plugin cache. An alias for `~/.bashrc`:
+1. the session setting, made with `on` or `off` in that session
+2. `CLAUDE_SPEAK_OFF=1` in the environment `claude` was started with (mutes that session from the start)
+3. the global setting
+
+So "global off, but on in this one session" works, and so does the reverse.
+
+Session settings are kept in the plugin's data folder (`~/.claude/plugins/data/speak-reply-speak-reply/sessions/`), so they survive a reboot and `claude --resume`. Settings older than 30 days are deleted at session start.
+
+From a terminal, the same control script is in the plugin cache. It has no session there, so only `stop`, `status`, `global on` and `global off` work. An alias for `~/.bashrc`:
 
 ```bash
 alias claude-speak='bash "$(ls -d ~/.claude/plugins/cache/speak-reply/speak-reply/*/ | sort -V | tail -n1)scripts/claude-speak"'
 ```
+
+## Upgrading from 0.1.0
+
+`off` and `on` now switch only the current session. Use `global off` and `global on` for what `off` and `on` did before. An existing global mute stays in place.
 
 ## Moving from the hand-made hooks
 

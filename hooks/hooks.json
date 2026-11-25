@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/check-deps.sh\"",
+            "command": "SPEAK_DATA=\"${CLAUDE_PLUGIN_DATA}\" bash \"${CLAUDE_PLUGIN_ROOT}/scripts/check-deps.sh\"",
             "timeout": 5
           }
         ]
@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/speak-reply.sh\"",
+            "command": "SPEAK_DATA=\"${CLAUDE_PLUGIN_DATA}\" bash \"${CLAUDE_PLUGIN_ROOT}/scripts/speak-reply.sh\"",
             "timeout": 10
           }
         ]

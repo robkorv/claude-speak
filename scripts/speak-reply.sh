@@ -12,10 +12,8 @@ voice_nl="$voices/nl_NL-pim-medium.onnx"
 # only stops speech started by its own session.
 piddir="${XDG_RUNTIME_DIR:-/tmp}/claude-speak-reply"
 
-# Muted with `claude-speak off` (creates this file).
-[ -e "$HOME/.claude/.speak-reply-off" ] && exit 0
-# Muted for one session by starting it with `CLAUDE_SPEAK_OFF=1 claude`.
-[ -n "$CLAUDE_SPEAK_OFF" ] && exit 0
+# shellcheck source=state.sh
+. "$(dirname "$0")/state.sh"
 
 # Make one line speakable: drop URLs (a markdown link keeps its text) and
 # markdown symbols, squeeze spaces.
@@ -41,6 +39,9 @@ if [ -e "$skipfile" ]; then
     rm -f "$skipfile"
     exit 0
 fi
+
+# Muted for this session, by `CLAUDE_SPEAK_OFF=1`, or globally (see state.sh).
+[ "$(effective_state "$session" | cut -d' ' -f1)" = off ] && exit 0
 
 # The first non-empty line, plus the last "Next:" line (the ADHD plugin's
 # next action) when the reply has one and it is not the first line itself.

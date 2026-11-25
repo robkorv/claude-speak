@@ -1,8 +1,14 @@
 #!/usr/bin/env bash
-# SessionStart hook: warn when Piper or a voice is missing (speech then falls
-# back to spd-say). Prints nothing when everything is in place.
+# SessionStart hook: clean up old session settings, and warn when Piper or a
+# voice is missing (speech then falls back to spd-say). Prints nothing when
+# everything is in place.
 piper="$HOME/.local/bin/piper"
 voices="$HOME/.local/share/piper-voices"
+# Delete session on/off settings older than 30 days (see state.sh).
+# shellcheck source=state.sh
+. "$(dirname "$0")/state.sh"
+[ -d "$sessiondir" ] && find "$sessiondir" -type f -mtime +30 -delete 2>/dev/null
+
 missing=()
 [ -x "$piper" ] || missing+=("Piper (~/.local/bin/piper)")
 for v in en_US-lessac-medium nl_NL-pim-medium; do

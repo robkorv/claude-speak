@@ -1,14 +1,18 @@
 #!/usr/bin/env bash
-# Control the claude-speak spoken-reply Stop hook (speak-reply.sh next to this file).
-#   claude-speak off          mute until turned back on (survives restarts)
-#   claude-speak on           unmute
-#   claude-speak status       show whether it is on or off
-#   claude-speak stop         stop speech from every session
+# Control the speak-reply plugin's spoken replies (speak-reply.sh next to this file).
+#   claude-speak [stop]       stop speech from every session
+#   claude-speak off | on     mute or unmute this session (needs SPEAK_SESSION,
+#                             set by the /speak-reply:speak command)
+#   claude-speak global off | global on
+#                             mute or unmute all sessions (survives restarts)
+#   claude-speak status       show this session's and the global setting
 #   claude-speak stop --hook  stop only this session's speech (reads the hook JSON
 #                             on stdin; used by the UserPromptSubmit hook), and
 #                             skip the reply to a /speak command
 piddir="${XDG_RUNTIME_DIR:-/tmp}/claude-speak-reply"
-muteflag="$HOME/.claude/.speak-reply-off"
+# shellcheck source=state.sh
+. "$(dirname "$0")/state.sh"
+session=$(safe_id "$SPEAK_SESSION")
 
 stop_file() {
     [ -f "$1" ] && kill -- -"$(cat "$1")" 2>/dev/null
@@ -19,6 +23,32 @@ stop_all() {
     for f in "$piddir"/*.pid; do stop_file "$f"; done
     spd-say -C 2>/dev/null
     return 0
+}
+
+need_session() {
+    [ -n "$session" ] && return 0
+    echo "no session id here; use 'global on' or 'global off', or run it as /speak-reply:speak in a session" >&2
+    exit 2
+}
+
+set_session() {
+    need_session
+    mkdir -p "$sessiondir" && echo "$1" > "$sessiondir/$session"
+}
+
+status() {
+    local g; g=$(global_state)
+    if [ -z "$session" ]; then
+        echo "spoken replies, global: $g"
+        return
+    fi
+    read -r state source <<< "$(effective_state "$session")"
+    case "$source" in
+        session) why="set in this session" ;;
+        env)     why="CLAUDE_SPEAK_OFF is set" ;;
+        global)  why="follows global" ;;
+    esac
+    echo "spoken replies, this session: $state ($why); global: $g"
 }
 
 case "${1:-stop}" in
@@ -36,9 +66,17 @@ case "${1:-stop}" in
         else
             stop_all; echo "spoken replies: stopped"
         fi ;;
-    off)    stop_all; touch "$muteflag"; echo "spoken replies: off" ;;
-    on)     rm -f "$muteflag"; echo "spoken replies: on" ;;
-    status) [ -e "$muteflag" ] && echo "spoken replies: off" || echo "spoken replies: on" ;;
-    *)      echo "usage: claude-speak [stop [--hook]|off|on|status]" >&2; exit 2 ;;
+    off)
+        need_session; stop_file "$piddir/$session.pid"; set_session off; status ;;
+    on)
+        set_session on; status ;;
+    global)
+        case "$2" in
+            off) stop_all; touch "$muteflag"; status ;;
+            on)  rm -f "$muteflag"; status ;;
+            *)   echo "usage: claude-speak global on|off" >&2; exit 2 ;;
+        esac ;;
+    status) status ;;
+    *)  echo "usage: claude-speak [stop|on|off|global on|global off|status]" >&2; exit 2 ;;
 esac
 exit 0

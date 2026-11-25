@@ -47,12 +47,12 @@ Inside Claude Code:
 
 | Command | What it does |
 |---|---|
-| `/speak` or `/speak stop` | stop the reply being read now, in every session |
-| `/speak off` | mute until turned back on; creates `~/.claude/.speak-reply-off`, so it survives restarts |
-| `/speak on` | unmute |
-| `/speak status` | show whether it is on or off |
+| `/speak-reply:speak` or `/speak-reply:speak stop` | stop the reply being read now, in every session |
+| `/speak-reply:speak off` | mute until turned back on; creates `~/.claude/.speak-reply-off`, so it survives restarts |
+| `/speak-reply:speak on` | unmute |
+| `/speak-reply:speak status` | show whether it is on or off |
 
-The reply to a `/speak` command is never read out loud.
+The reply to a `/speak-reply:speak` command is never read out loud.
 
 Mute one session only: start it with `CLAUDE_SPEAK_OFF=1 claude`. Hooks inherit the environment `claude` was started with, so other sessions keep talking.
 

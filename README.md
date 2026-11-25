@@ -3,7 +3,7 @@
 A Claude Code plugin (named `speak-reply`) that reads the first line of each Claude reply out loud, plus its last line starting with `Next:` (the next action from the [i-have-adhd](https://github.com/ayghri/i-have-adhd) plugin). It uses [Piper](https://github.com/OHF-Voice/piper1-gpl), an offline neural voice, and falls back to `spd-say` (speech-dispatcher, preinstalled on Ubuntu) when Piper is missing.
 
 - URLs are skipped; a markdown link keeps its link text.
-- Each reply is read in Dutch or English: the hook counts common Dutch and English words in the reply (code blocks skipped) and uses the Dutch voice only when Dutch words win.
+- Each spoken line is read in Dutch or English: the hook counts common Dutch and English words in that line and uses the Dutch voice only when Dutch words win. When a line has as many of each (say, "Klaar."), it uses the language of the whole reply (code blocks skipped). So an English line before a quoted Dutch text is still read in English.
 - Sending your next prompt stops the speech of that session. A new reply in any session cuts off speech from the other sessions, so two voices never overlap.
 
 Built and tested on Ubuntu.

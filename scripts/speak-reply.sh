@@ -55,9 +55,10 @@ fi
 
 [ -z "$(printf '%s' "$line" | tr -d '[:space:]')" ] && exit 0
 
-# Guess Dutch or English from common words in the whole reply (code blocks
-# skipped): Dutch wins only when it has more hits than English.
-lang=$(printf '%s\n' "$msg" | awk '
+# Guess Dutch or English from common words (code blocks skipped): Dutch wins
+# only when it has more hits than English; a tie prints the fallback ($1).
+guess_lang() {
+    awk -v fallback="$1" '
     /^[[:space:]]*```/ { code = !code; next }
     code { next }
     {
@@ -67,12 +68,28 @@ lang=$(printf '%s\n' "$msg" | awk '
             if (w[i] ~ /^(the|a|an|not|of|that|this|these|you|is|are|be|will|also|still|but|for|with|to|at|must|can|have|what|there|it|and|on|in|so|if|then)$/) en++
         }
     }
-    END { print (nl > en ? "nl" : "en") }')
+    END { print (nl > en ? "nl" : (en > nl ? "en" : fallback)) }'
+}
 
-voice="$voice_en"
-[ "$lang" = nl ] && [ -f "$voice_nl" ] && voice="$voice_nl"
-rate=$(jq -r '.audio.sample_rate // 22050' "$voice.json" 2>/dev/null)
-[ -n "$rate" ] || rate=22050
+# Each spoken line gets its own language, so an English line before a quoted
+# Dutch text is still read in English. A line that ties falls back to the
+# language of the whole reply.
+reply_lang=$(printf '%s\n' "$msg" | guess_lang en)
+
+# Arguments for the player: voice, sample rate, language, text, per line.
+segments=()
+use_piper=1
+[ -x "$piper" ] || use_piper=0
+while IFS= read -r l; do
+    [ -z "$(printf '%s' "$l" | tr -d '[:space:]')" ] && continue
+    lang=$(printf '%s\n' "$l" | guess_lang "$reply_lang")
+    voice="$voice_en"
+    [ "$lang" = nl ] && [ -f "$voice_nl" ] && voice="$voice_nl"
+    [ -f "$voice" ] || use_piper=0
+    rate=$(jq -r '.audio.sample_rate // 22050' "$voice.json" 2>/dev/null)
+    [ -n "$rate" ] || rate=22050
+    segments+=("$voice" "$rate" "$lang" "$l")
+done <<< "$line"
 
 # Stop whatever is still being read, in any session, so two voices never overlap.
 mkdir -p "$piddir"
@@ -81,20 +98,29 @@ for f in "$piddir"/*.pid; do
     rm -f "$f"
 done
 
-# Fall back to spd-say when Piper or the voice is missing.
-if [ ! -x "$piper" ] || [ ! -f "$voice" ]; then
+# Fall back to spd-say when Piper or a voice is missing.
+if [ "$use_piper" = 0 ]; then
     spd-say -C 2>/dev/null
-    spd-say -l "$lang" -- "${line//$'\n'/ }" 2>/dev/null
+    set -- "${segments[@]}"
+    while [ $# -ge 4 ]; do
+        spd-say -l "$3" -- "$4" 2>/dev/null
+        shift 4
+    done
     exit 0
 fi
 
 # Run detached in its own process group so the turn ends right away.
 setsid bash -c '
-    echo $$ > "$2"
-    printf "%s\n" "$1" \
-        | "$4" -m "$3" --output-raw 2>/dev/null \
-        | aplay -q -r "$5" -f S16_LE -t raw -c 1 2>/dev/null
-    rm -f "$2"
-' _ "$line" "$pidfile" "$voice" "$piper" "$rate" </dev/null >/dev/null 2>&1 &
+    pidfile=$1 piper=$2
+    shift 2
+    echo $$ > "$pidfile"
+    while [ $# -ge 4 ]; do
+        printf "%s\n" "$4" \
+            | "$piper" -m "$1" --output-raw 2>/dev/null \
+            | aplay -q -r "$2" -f S16_LE -t raw -c 1 2>/dev/null
+        shift 4
+    done
+    rm -f "$pidfile"
+' _ "$pidfile" "$piper" "${segments[@]}" </dev/null >/dev/null 2>&1 &
 
 exit 0

@@ -66,7 +66,7 @@ So "global off, but on in this one session" works, and so does the reverse.
 
 Session settings are kept in the plugin's data folder (`~/.claude/plugins/data/speak-reply-speak-reply/sessions/`), so they survive a reboot and `claude --resume`. Settings older than 30 days are deleted at session start.
 
-From a terminal, the same control script is in the plugin cache. It has no session there, so only `stop`, `status`, `global on` and `global off` work. An alias for `~/.bashrc`:
+From a terminal, the same control script is in the plugin cache. It has no session there, so only `stop`, `status`, `global on` and `global off` work. An alias for `~/.zshrc` or `~/.bashrc`:
 
 ```bash
 alias claude-speak='bash "$(ls -d ~/.claude/plugins/cache/speak-reply/speak-reply/*/ | sort -V | tail -n1)scripts/claude-speak"'

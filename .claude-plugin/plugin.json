@@ -1,11 +1,25 @@
 {
   "name": "speak-reply",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Read the first line and the \"Next:\" line of each Claude reply out loud with Piper (offline neural voice), in Dutch or English.",
   "author": {
     "name": "Robbert Korving",
     "url": "https://github.com/robkorv"
   },
   "repository": "https://github.com/robkorv/claude-speak",
-  "license": "MIT"
+  "license": "MIT",
+  "userConfig": {
+    "voice_en": {
+      "type": "string",
+      "title": "English voice",
+      "description": "Piper voice for English lines: a voice name in ~/.local/share/piper-voices (like en_US-lessac-high) or the full path to an .onnx file.",
+      "default": "en_US-lessac-medium"
+    },
+    "voice_nl": {
+      "type": "string",
+      "title": "Dutch voice",
+      "description": "Piper voice for Dutch lines: a voice name in ~/.local/share/piper-voices (like nl_NL-pim-medium) or the full path to an .onnx file.",
+      "default": "nl_NL-pim-medium"
+    }
+  }
 }

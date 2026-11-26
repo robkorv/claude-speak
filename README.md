@@ -41,6 +41,24 @@ Built and tested on Ubuntu.
 
 The plugin calls Piper as `~/.local/bin/piper` on purpose: `/usr/bin/piper` on Ubuntu is the libratbag mouse-configuration app (package `piper`), not Piper TTS.
 
+## Choose the voices
+
+The plugin has two options: `voice_en` (default `en_US-lessac-medium`) and `voice_nl` (default `nl_NL-pim-medium`). Each takes a voice name in `~/.local/share/piper-voices`, or the full path to an `.onnx` file. Listen to the voices at <https://rhasspy.github.io/piper-samples/>.
+
+1. Download the voice, for example the larger English one (109 MB):
+
+   ```bash
+   ~/.local/share/pipx/venvs/piper-tts/bin/python -m piper.download_voices --data-dir ~/.local/share/piper-voices en_US-lessac-high
+   ```
+
+2. Set it, inside Claude Code with `/plugin configure speak-reply@speak-reply`, or from a terminal:
+
+   ```bash
+   echo '{"voice_en": "en_US-lessac-high"}' | claude plugin configure speak-reply@speak-reply --values-stdin
+   ```
+
+3. Restart `claude`. When a chosen voice file is missing, a warning shows at session start.
+
 ## Control it
 
 Inside Claude Code:

@@ -3,7 +3,6 @@
 # voice is missing (speech then falls back to spd-say). Prints nothing when
 # everything is in place.
 piper="$HOME/.local/bin/piper"
-voices="$HOME/.local/share/piper-voices"
 # Delete session on/off settings older than 30 days (see state.sh).
 # shellcheck source=state.sh
 . "$(dirname "$0")/state.sh"
@@ -11,8 +10,13 @@ voices="$HOME/.local/share/piper-voices"
 
 missing=()
 [ -x "$piper" ] || missing+=("Piper (~/.local/bin/piper)")
-for v in en_US-lessac-medium nl_NL-pim-medium; do
-    [ -f "$voices/$v.onnx" ] || missing+=("voice $v")
+seen=""
+for lang in en nl; do
+    v=$(voice_path "$lang")
+    [ -f "$v" ] && continue
+    [ "$v" = "$seen" ] && continue
+    seen="$v"
+    missing+=("voice ${v/#"$HOME"\//\~/}")
 done
 command -v jq >/dev/null || missing+=("jq")
 [ ${#missing[@]} -eq 0 ] && exit 0

@@ -1,6 +1,6 @@
 {
   "name": "speak-reply",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Read the first line and the \"Next:\" line of each Claude reply out loud with Piper (offline neural voice), in Dutch or English.",
   "author": {
     "name": "Robbert Korving",

@@ -59,3 +59,25 @@ voice_path() {
     esac
     printf '%s.onnx\n' "$v"
 }
+
+# Pid files of the replies being read or waiting (<session>.<time>.pid), the
+# spd-say markers (<session>.spd) and skip flags. One lock guards them.
+piddir="${XDG_RUNTIME_DIR:-/tmp}/claude-speak-reply"
+
+# Take the pid file lock on fd 9, held until the script exits. Children that
+# outlive the script must close fd 9 (9>&-).
+lock_piddir() {
+    mkdir -p "$piddir" && exec 9>"$piddir/.lock" && flock -w 5 9 2>/dev/null
+}
+
+# True when process $2 is the reply that wrote pid file $1: the pid file is in
+# its command line, so a pid reused by another program doesn't count.
+is_reply() { [ -n "$2" ] && grep -qzxF -- "$1" "/proc/$2/cmdline" 2>/dev/null; }
+
+# Stop one reply by its pid file and remove the file.
+stop_reply() {
+    [ -f "$1" ] || return 0
+    local pid; pid=$(cat "$1" 2>/dev/null)
+    is_reply "$1" "$pid" && kill -- -"$pid" 2>/dev/null
+    rm -f "$1"
+}

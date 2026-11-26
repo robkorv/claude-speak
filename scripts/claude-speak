@@ -9,20 +9,23 @@
 #   claude-speak stop --hook  stop only this session's speech (reads the hook JSON
 #                             on stdin; used by the UserPromptSubmit and SessionEnd
 #                             hooks), and skip the reply to a /speak command
-piddir="${XDG_RUNTIME_DIR:-/tmp}/claude-speak-reply"
 # shellcheck source=state.sh
 . "$(dirname "$0")/state.sh"
 session=$(safe_id "$SPEAK_SESSION")
 
-stop_file() {
-    [ -f "$1" ] && kill -- -"$(cat "$1")" 2>/dev/null
-    rm -f "$1"
+# True when the prompt was typed by the user. Background agent results and
+# task notifications come in as prompts too, wrapped in a tag on the first line.
+is_user_prompt() {
+    local re='^[[:space:]]*<(agent-message|task-notification)[[:space:]>]'
+    ! [[ ${1%%$'\n'*} =~ $re ]]
 }
 
 # Stop this session's speech: Piper by its pid file, spd-say (no process to
 # kill) by cancelling it when this session's last reply went there.
 stop_session() {
-    stop_file "$piddir/$session.pid"
+    lock_piddir
+    # Every reply of the session, the one being read and the ones waiting.
+    for f in "$piddir/$session".*.pid; do stop_reply "$f"; done
     if [ -e "$piddir/$session.spd" ]; then
         spd-say -C 2>/dev/null
         rm -f "$piddir/$session.spd"
@@ -30,7 +33,8 @@ stop_session() {
 }
 
 stop_all() {
-    for f in "$piddir"/*.pid; do stop_file "$f"; done
+    lock_piddir
+    for f in "$piddir"/*.pid; do stop_reply "$f"; done
     rm -f "$piddir"/*.spd
     spd-say -C 2>/dev/null
     return 0
@@ -66,10 +70,14 @@ case "${1:-stop}" in
     stop)
         if [ "$2" = "--hook" ]; then
             input=$(cat)
-            session=$(printf '%s' "$input" | jq -r '.session_id // empty' 2>/dev/null | tr -cd 'A-Za-z0-9-')
+            # The event goes first: it is never empty, so read keeps the fields apart.
+            read -r event session < <(printf '%s' "$input" \
+                | jq -r '[.hook_event_name // "-", .session_id // ""] | @tsv' 2>/dev/null)
+            session=$(safe_id "$session")
             prompt=$(printf '%s' "$input" | jq -r '.prompt // empty' 2>/dev/null)
-            event=$(printf '%s' "$input" | jq -r '.hook_event_name // empty' 2>/dev/null)
             [ -n "$session" ] || exit 0
+            # Not the user talking: leave the speech running, so the reply queues.
+            [ "$event" = UserPromptSubmit ] && ! is_user_prompt "$prompt" && exit 0
             stop_session
             # Session over: drop its leftover skip flag. Its on/off setting stays
             # for `claude --resume`; check-deps.sh prunes old ones.

@@ -98,15 +98,25 @@ for f in "$piddir"/*.pid; do
     [ -f "$f" ] && kill -- -"$(cat "$f")" 2>/dev/null
     rm -f "$f"
 done
+rm -f "$piddir"/*.spd
 
-# Fall back to spd-say when Piper or a voice is missing.
+# Fall back to spd-say when Piper or a voice is missing. spd-say has no
+# process to kill, so a marker tells `claude-speak stop --hook` to cancel it.
 if [ "$use_piper" = 0 ]; then
     spd-say -C 2>/dev/null
-    set -- "${segments[@]}"
-    while [ $# -ge 4 ]; do
-        spd-say -l "$3" -- "$4" 2>/dev/null
-        shift 4
-    done
+    touch "$piddir/${session:-unknown}.spd"
+    # One line at a time (-w): a new spd-say line cuts off the one being read.
+    # Detached like Piper below, with a pid file so a stop also ends the loop.
+    setsid bash -c '
+        pidfile=$1
+        shift
+        echo $$ > "$pidfile"
+        while [ $# -ge 4 ]; do
+            spd-say -w -l "$3" -- "$4" 2>/dev/null
+            shift 4
+        done
+        rm -f "$pidfile"
+    ' _ "$pidfile" "${segments[@]}" </dev/null >/dev/null 2>&1 &
     exit 0
 fi
 

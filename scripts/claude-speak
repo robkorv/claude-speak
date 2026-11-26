@@ -19,8 +19,19 @@ stop_file() {
     rm -f "$1"
 }
 
+# Stop this session's speech: Piper by its pid file, spd-say (no process to
+# kill) by cancelling it when this session's last reply went there.
+stop_session() {
+    stop_file "$piddir/$session.pid"
+    if [ -e "$piddir/$session.spd" ]; then
+        spd-say -C 2>/dev/null
+        rm -f "$piddir/$session.spd"
+    fi
+}
+
 stop_all() {
     for f in "$piddir"/*.pid; do stop_file "$f"; done
+    rm -f "$piddir"/*.spd
     spd-say -C 2>/dev/null
     return 0
 }
@@ -58,7 +69,7 @@ case "${1:-stop}" in
             session=$(printf '%s' "$input" | jq -r '.session_id // empty' 2>/dev/null | tr -cd 'A-Za-z0-9-')
             prompt=$(printf '%s' "$input" | jq -r '.prompt // empty' 2>/dev/null)
             [ -n "$session" ] || exit 0
-            stop_file "$piddir/$session.pid"
+            stop_session
             # A /speak command: don't read its own reply out loud.
             if printf '%s' "$prompt" | grep -qE '^[[:space:]]*/(speak-reply:)?speak([[:space:]]|$)'; then
                 mkdir -p "$piddir" && touch "$piddir/$session.skip"
@@ -67,7 +78,7 @@ case "${1:-stop}" in
             stop_all; echo "spoken replies: stopped"
         fi ;;
     off)
-        need_session; stop_file "$piddir/$session.pid"; set_session off; status ;;
+        need_session; stop_session; set_session off; status ;;
     on)
         set_session on; status ;;
     global)

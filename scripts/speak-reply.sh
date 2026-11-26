@@ -83,7 +83,9 @@ while IFS= read -r l; do
     [ -z "$(printf '%s' "$l" | tr -d '[:space:]')" ] && continue
     lang=$(printf '%s\n' "$l" | guess_lang "$reply_lang")
     voice="$voice_en"
-    [ "$lang" = nl ] && [ -f "$voice_nl" ] && voice="$voice_nl"
+    [ "$lang" = nl ] && voice="$voice_nl"
+    # A missing voice sends the whole reply to spd-say, which reads each line
+    # in its own language (rather than Dutch in the English Piper voice).
     [ -f "$voice" ] || use_piper=0
     rate=$(jq -r '.audio.sample_rate // 22050' "$voice.json" 2>/dev/null)
     [ -n "$rate" ] || rate=22050

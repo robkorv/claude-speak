@@ -33,18 +33,28 @@ effective_state() {
 }
 
 # Voice for a language (en|nl): the plugin option (voice_en / voice_nl), else
-# the default. A bare name is looked up in the voices folder; a value with a
-# slash is used as a path. The ".onnx" ending is optional.
+# the default. An absolute path (or one starting with ~/ or $HOME/) is used as
+# is; anything else, a bare name or a relative path, is looked up in the voices
+# folder. The ".onnx" ending is optional, in any case. Surrounding whitespace
+# is ignored.
 voice_path() {
     local v
     case "$1" in
-        nl) v="${CLAUDE_PLUGIN_OPTION_VOICE_NL:-nl_NL-pim-medium}" ;;
-        *) v="${CLAUDE_PLUGIN_OPTION_VOICE_EN:-en_US-lessac-medium}" ;;
+        nl) v="${CLAUDE_PLUGIN_OPTION_VOICE_NL:-}" ;;
+        *) v="${CLAUDE_PLUGIN_OPTION_VOICE_EN:-}" ;;
     esac
-    v="${v%.onnx}"
+    v="${v#"${v%%[![:space:]]*}"}"
+    v="${v%"${v##*[![:space:]]}"}"
+    if [ -z "$v" ]; then
+        case "$1" in nl) v=nl_NL-pim-medium ;; *) v=en_US-lessac-medium ;; esac
+    fi
+    case "$v" in *.[oO][nN][nN][xX]) v="${v%.*}" ;; esac
+    # shellcheck disable=SC2016  # a literal $HOME typed into the option
     case "$v" in
         "~/"*) v="$HOME/${v#"~/"}" ;;
-        */*) ;;
+        '$HOME/'*) v="$HOME/${v#'$HOME/'}" ;;
+        '${HOME}/'*) v="$HOME/${v#'${HOME}/'}" ;;
+        /*) ;;
         *) v="$HOME/.local/share/piper-voices/$v" ;;
     esac
     printf '%s.onnx\n' "$v"

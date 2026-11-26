@@ -10,9 +10,13 @@ piper="$HOME/.local/bin/piper"
 
 missing=()
 [ -x "$piper" ] || missing+=("Piper (~/.local/bin/piper)")
+seen=""
 for lang in en nl; do
     v=$(voice_path "$lang")
-    [ -f "$v" ] || missing+=("voice ${v/#$HOME/\~}")
+    [ -f "$v" ] && continue
+    [ "$v" = "$seen" ] && continue
+    seen="$v"
+    missing+=("voice ${v/#"$HOME"\//\~/}")
 done
 command -v jq >/dev/null || missing+=("jq")
 [ ${#missing[@]} -eq 0 ] && exit 0

@@ -4,7 +4,7 @@ A Claude Code plugin (named `speak-reply`) that reads the first line of each Cla
 
 - URLs are skipped; a markdown link keeps its link text.
 - Each spoken line is read in Dutch or English: the hook counts common Dutch and English words in that line and uses the Dutch voice only when Dutch words win. When a line has as many of each (say, "Klaar."), it uses the language of the whole reply (code blocks skipped). So an English line before a quoted Dutch text is still read in English.
-- Sending your next prompt, or ending the session (`/exit`, `/clear`, Ctrl+D), stops the speech of that session. A new reply in any session cuts off speech from the other sessions, so two voices never overlap.
+- Sending your next prompt, or ending the session (`/exit`, `/clear`, Ctrl+D), stops the speech of that session. Replies that come without a prompt, like the results of background agents, are read one after another instead of cutting each other off. A new reply in any session cuts off speech from the other sessions, so two voices never overlap.
 
 Built and tested on Ubuntu.
 

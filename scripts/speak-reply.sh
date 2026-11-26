@@ -5,10 +5,6 @@
 
 # Absolute path: /usr/bin/piper on Ubuntu is the libratbag mouse tool, not Piper TTS.
 piper="$HOME/.local/bin/piper"
-# One pid file per session, so `claude-speak stop --hook` (UserPromptSubmit and
-# SessionEnd) only stops speech started by its own session.
-piddir="${XDG_RUNTIME_DIR:-/tmp}/claude-speak-reply"
-
 # shellcheck source=state.sh
 . "$(dirname "$0")/state.sh"
 voice_en=$(voice_path en)
@@ -29,8 +25,10 @@ clean() {
 
 input=$(cat)
 msg=$(printf '%s' "$input" | jq -r '.last_assistant_message // empty' 2>/dev/null)
-session=$(printf '%s' "$input" | jq -r '.session_id // empty' 2>/dev/null | tr -cd 'A-Za-z0-9-')
-pidfile="$piddir/${session:-unknown}.pid"
+# stop_hook_active goes first: it is never empty, so read keeps the fields apart.
+read -r stop_active session < <(printf '%s' "$input" \
+    | jq -r '[.stop_hook_active // false, .session_id // ""] | @tsv' 2>/dev/null)
+session=$(safe_id "$session")
 
 # The prompt was a /speak command (flagged by the UserPromptSubmit hook): stay quiet.
 skipfile="$piddir/${session:-unknown}.skip"
@@ -92,56 +90,96 @@ while IFS= read -r l; do
     segments+=("$voice" "$rate" "$lang" "$l")
 done <<< "$line"
 
-# Stop whatever is still being read, in any session, so two voices never overlap.
-mkdir -p "$piddir"
+id="${session:-unknown}"
+
+# One pid file per reply, named <session>.<time>.pid, so `claude-speak stop
+# --hook` (UserPromptSubmit and SessionEnd) only stops its own session's speech.
+# The lock (see state.sh) makes picking the reply to wait for, writing this
+# reply's pid file and marker, a finished reply's cleanup and `claude-speak
+# stop` happen one at a time, so no one reads a half-written pid file or misses
+# a new one.
+lock_piddir
+
+# This session's own speech is not cut off: a new reply that comes without a
+# prompt (a background agent's result) waits for it, in order. A new prompt
+# already stopped it (UserPromptSubmit hook), so a normal reply starts at once.
+# Cut it off anyway when Claude goes on because a Stop hook blocked (this reply
+# replaces the one before it), or when there is no session id to tell sessions
+# apart. $own is the session whose speech is kept.
+own="$id"
+{ [ -z "$session" ] || [ "$stop_active" = true ]; } && own=""
+
+# Stop what other sessions are still reading (and this session's, see above),
+# so two voices never overlap. Killing an spd-say client does not stop the line
+# it already sent, so cancel speech-dispatcher too when a stopped reply went
+# there.
 for f in "$piddir"/*.pid; do
-    [ -f "$f" ] && kill -- -"$(cat "$f")" 2>/dev/null
+    case "${f##*/}" in "$own".*) continue ;; esac
+    stop_reply "$f"
+done
+cancel_spd=0
+for f in "$piddir"/*.spd; do
+    [ -e "$f" ] || continue
+    case "${f##*/}" in "$own".*) continue ;; esac
+    cancel_spd=1
     rm -f "$f"
 done
-# Killing an spd-say client does not stop the line it already sent, so cancel
-# speech-dispatcher too when another reply went there.
-if compgen -G "$piddir/*.spd" >/dev/null; then
-    spd-say -C 2>/dev/null
-    rm -f "$piddir"/*.spd
-fi
+[ "$cancel_spd" = 1 ] && spd-say -C 2>/dev/null
 
-# Fall back to spd-say when Piper or a voice is missing. spd-say has no
-# process to kill, so a marker tells `claude-speak stop --hook` to cancel it.
+# The newest pid file of this session is the reply to wait for; the names have
+# the same length and glob in time order.
+prevfile=""
+if [ -n "$own" ]; then
+    prevs=("$piddir/$id".*.pid)
+    [ -e "${prevs[-1]}" ] && prevfile="${prevs[-1]}"
+fi
+pidfile="$piddir/$id.${EPOCHREALTIME//[!0-9]/}.pid"
+# Exists before the child starts, so the child doesn't take it for a stop.
+: > "$pidfile"
+
+# Fall back to spd-say (an empty $piper) when Piper or a voice is missing.
+# spd-say has no process to kill, so a marker tells `claude-speak stop --hook`
+# to cancel it. spd-say reads one line at a time (-w): a new spd-say line cuts
+# off the one being read.
 if [ "$use_piper" = 0 ]; then
-    spd-say -C 2>/dev/null
-    touch "$piddir/${session:-unknown}.spd"
-    # One line at a time (-w): a new spd-say line cuts off the one being read.
-    # Detached like Piper below, with a pid file so a stop also ends the loop.
-    # A finished reply removes its marker, so a later stop leaves other
-    # speech-dispatcher programs (a screen reader) alone.
-    setsid bash -c '
-        pidfile=$1
-        shift
-        while [ $# -ge 4 ] && [ -e "$pidfile" ]; do
-            spd-say -w -l "$3" -- "$4" 2>/dev/null
-            shift 4
-        done
-        rm -f "$pidfile" "${pidfile%.pid}.spd"
-    ' _ "$pidfile" "${segments[@]}" </dev/null >/dev/null 2>&1 &
-    echo $! > "$pidfile"
-    exit 0
+    piper=""
+    touch "$piddir/$id.spd"
 fi
 
 # Run detached in its own process group so the turn ends right away.
 # The pid file is written here, not by the child, so a stop that comes right
-# after the reply finds it; a missing pid file tells the child to stop.
+# after the reply finds it; a missing pid file tells the child to stop. A stop
+# kills the whole group, so the wait below ends with it.
 # ($! is the group: setsid does not fork, as a background job leads no group.)
+export -f is_reply
 setsid bash -c '
-    pidfile=$1 piper=$2
-    shift 2
+    pidfile=$1 prevfile=$2 piper=$3
+    shift 3
+    # Wait for the reply before this one to finish (or be stopped).
+    if [ -n "$prevfile" ]; then
+        prev=$(cat "$prevfile" 2>/dev/null)
+        is_reply "$prevfile" "$prev" && tail --pid="$prev" -f /dev/null
+    fi
     while [ $# -ge 4 ] && [ -e "$pidfile" ]; do
-        printf "%s\n" "$4" \
-            | "$piper" -m "$1" --output-raw 2>/dev/null \
-            | aplay -q -r "$2" -f S16_LE -t raw -c 1 2>/dev/null
+        if [ -z "$piper" ]; then
+            spd-say -w -l "$3" -- "$4" 2>/dev/null
+        else
+            printf "%s\n" "$4" \
+                | "$piper" -m "$1" --output-raw 2>/dev/null \
+                | aplay -q -r "$2" -f S16_LE -t raw -c 1 2>/dev/null
+        fi
         shift 4
     done
-    rm -f "$pidfile"
-' _ "$pidfile" "$piper" "${segments[@]}" </dev/null >/dev/null 2>&1 &
+    # The last reply of the session removes the spd-say marker, so a later
+    # stop leaves other speech-dispatcher programs (a screen reader) alone.
+    base=${pidfile%.*.pid}
+    {
+        flock -w 5 9 2>/dev/null
+        rm -f "$pidfile"
+        compgen -G "$base.*.pid" >/dev/null || rm -f "$base.spd"
+    } 9>"${pidfile%/*}/.lock"
+' _ "$pidfile" "$prevfile" "$piper" "${segments[@]}" \
+    </dev/null >/dev/null 2>&1 9>&- &
 echo $! > "$pidfile"
 
 exit 0

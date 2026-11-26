@@ -5,8 +5,8 @@
 
 # Absolute path: /usr/bin/piper on Ubuntu is the libratbag mouse tool, not Piper TTS.
 piper="$HOME/.local/bin/piper"
-# One pid file per session, so `claude-speak stop --hook` (UserPromptSubmit)
-# only stops speech started by its own session.
+# One pid file per session, so `claude-speak stop --hook` (UserPromptSubmit and
+# SessionEnd) only stops speech started by its own session.
 piddir="${XDG_RUNTIME_DIR:-/tmp}/claude-speak-reply"
 
 # shellcheck source=state.sh
@@ -98,24 +98,43 @@ for f in "$piddir"/*.pid; do
     [ -f "$f" ] && kill -- -"$(cat "$f")" 2>/dev/null
     rm -f "$f"
 done
+# Killing an spd-say client does not stop the line it already sent, so cancel
+# speech-dispatcher too when another reply went there.
+if compgen -G "$piddir/*.spd" >/dev/null; then
+    spd-say -C 2>/dev/null
+    rm -f "$piddir"/*.spd
+fi
 
-# Fall back to spd-say when Piper or a voice is missing.
+# Fall back to spd-say when Piper or a voice is missing. spd-say has no
+# process to kill, so a marker tells `claude-speak stop --hook` to cancel it.
 if [ "$use_piper" = 0 ]; then
     spd-say -C 2>/dev/null
-    set -- "${segments[@]}"
-    while [ $# -ge 4 ]; do
-        spd-say -l "$3" -- "$4" 2>/dev/null
-        shift 4
-    done
+    touch "$piddir/${session:-unknown}.spd"
+    # One line at a time (-w): a new spd-say line cuts off the one being read.
+    # Detached like Piper below, with a pid file so a stop also ends the loop.
+    # A finished reply removes its marker, so a later stop leaves other
+    # speech-dispatcher programs (a screen reader) alone.
+    setsid bash -c '
+        pidfile=$1
+        shift
+        while [ $# -ge 4 ] && [ -e "$pidfile" ]; do
+            spd-say -w -l "$3" -- "$4" 2>/dev/null
+            shift 4
+        done
+        rm -f "$pidfile" "${pidfile%.pid}.spd"
+    ' _ "$pidfile" "${segments[@]}" </dev/null >/dev/null 2>&1 &
+    echo $! > "$pidfile"
     exit 0
 fi
 
 # Run detached in its own process group so the turn ends right away.
+# The pid file is written here, not by the child, so a stop that comes right
+# after the reply finds it; a missing pid file tells the child to stop.
+# ($! is the group: setsid does not fork, as a background job leads no group.)
 setsid bash -c '
     pidfile=$1 piper=$2
     shift 2
-    echo $$ > "$pidfile"
-    while [ $# -ge 4 ]; do
+    while [ $# -ge 4 ] && [ -e "$pidfile" ]; do
         printf "%s\n" "$4" \
             | "$piper" -m "$1" --output-raw 2>/dev/null \
             | aplay -q -r "$2" -f S16_LE -t raw -c 1 2>/dev/null
@@ -123,5 +142,6 @@ setsid bash -c '
     done
     rm -f "$pidfile"
 ' _ "$pidfile" "$piper" "${segments[@]}" </dev/null >/dev/null 2>&1 &
+echo $! > "$pidfile"
 
 exit 0

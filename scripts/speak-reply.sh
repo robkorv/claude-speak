@@ -5,15 +5,14 @@
 
 # Absolute path: /usr/bin/piper on Ubuntu is the libratbag mouse tool, not Piper TTS.
 piper="$HOME/.local/bin/piper"
-voices="$HOME/.local/share/piper-voices"
-voice_en="$voices/en_US-lessac-medium.onnx"
-voice_nl="$voices/nl_NL-pim-medium.onnx"
 # One pid file per session, so `claude-speak stop --hook` (UserPromptSubmit)
 # only stops speech started by its own session.
 piddir="${XDG_RUNTIME_DIR:-/tmp}/claude-speak-reply"
 
 # shellcheck source=state.sh
 . "$(dirname "$0")/state.sh"
+voice_en=$(voice_path en)
+voice_nl=$(voice_path nl)
 
 # Make one line speakable: drop URLs (a markdown link keeps its text) and
 # markdown symbols, squeeze spaces.

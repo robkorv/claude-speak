@@ -31,3 +31,21 @@ effective_state() {
     else echo "$(global_state) global"
     fi
 }
+
+# Voice for a language (en|nl): the plugin option (voice_en / voice_nl), else
+# the default. A bare name is looked up in the voices folder; a value with a
+# slash is used as a path. The ".onnx" ending is optional.
+voice_path() {
+    local v
+    case "$1" in
+        nl) v="${CLAUDE_PLUGIN_OPTION_VOICE_NL:-nl_NL-pim-medium}" ;;
+        *) v="${CLAUDE_PLUGIN_OPTION_VOICE_EN:-en_US-lessac-medium}" ;;
+    esac
+    v="${v%.onnx}"
+    case "$v" in
+        "~/"*) v="$HOME/${v#"~/"}" ;;
+        */*) ;;
+        *) v="$HOME/.local/share/piper-voices/$v" ;;
+    esac
+    printf '%s.onnx\n' "$v"
+}
